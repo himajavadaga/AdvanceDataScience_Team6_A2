@@ -5,12 +5,9 @@
 #installing and importing the library
 #install.packages('stringr')
 library(stringr)
-#install.packages('weatherData')
-library(weatherData)
+
 #install.packages('outliers')
-#install.packages('zoo')
 library(outliers)
-library(zoo)
 
 #helps the user to pick the file
 x=file.choose(new = FALSE)
@@ -91,11 +88,6 @@ rawdata$DayofWeek <- with(rawdata, ifelse(DayofWeek=="Mon", 1,ifelse(DayofWeek==
 #rearranging the order of columns 
 rawdata=rawdata[,c(4,1,3,5,6,7,2,8,9,10)]
 
-
-summary(rawdata)
-
-
-#Replacing NAs with mean of next 2 observations for temperature
 for(i in 1:length(rawdata$kWh))
 {
   if(is.na(rawdata$kWh[i])==TRUE)
@@ -103,35 +95,108 @@ for(i in 1:length(rawdata$kWh))
     rawdata$kWh[i]=mean(rawdata$kWh[i:(i+2)],na.rm=TRUE)
   }
 }
-summary(rawdata)
 
-pb=rawdata
+#Spliting the file into two files one with Kwh==0 and KwH!=0 values
+rawdatanozero<-rawdata[!(rawdata$kWh==0),]
 
+rawdatawithzero<-rawdata[(rawdata$kWh==0),]
 
+#Start regression for non-zero value dataset
 
-
-
-#replacing zeros with NA
-
-for(i in 1:length(rawdata$kWh))
-{
-  if(rawdata$kWh[i] == 0)
-  {
-    rawdata$kWh[i]=NA
-  }
-}
-summary(rawdata)
+#covert in numeric date format 
+rawdatanozero$month <- as.numeric(rawdatanozero$month)
+rawdatanozero$day <- as.numeric(rawdatanozero$day)
+rawdatanozero$year <- as.numeric(rawdatanozero$year)
+#rawdatanozero$Weekday <- as.factor(rawdatanozero$Weekday)
 
 
-#Using Zoo package and filling NA's with na.fill
-rawdata$kWh <- zoo(rawdata$kWh)
-rawdata$kWh=na.fill(rawdata$kWh, "extend")
-summary(rawdata)
-#write.csv(rawdata,"New Data without Zeros.csv",row.names = FALSE)
+#singularities for account and year so remove them.
+lm.fit=lm(kWh~. -Account -Date -year -day -hour, data=rawdatanozero)
+summary(lm.fit)
+
+summary(rawdatanozero)
+structure(rawdatanozero)
+
+library(MASS)
+library(ISLR)
+smp_size <- floor(0.80*nrow(rawdatanozero))
+set.seed(123)
+train_ind <- sample(seq_len(nrow(rawdatanozero)),size=smp_size)
+train <- rawdatanozero[train_ind, ]
+test <- rawdatanozero[-train_ind, ]
+
+lm.fit = lm(kWh~. -Account -Date -year -day -hour, data = train)
+summary(lm.fit)
+
+library(forecast)
+pred = predict(lm.fit, test)
+
+#Exporting ReggressionOutputs and PerformanceMatrics
+
+a = accuracy(pred,train$kWh)
+b= lm.fit$coefficients
+
+write.csv(b, "1bRegressionOutputs.csv")
+write.csv(a, "1bPerformanceMatrics.csv")
+
+
+#predict kWh usage for rawdatawithzero using predictionmodel of rawdatanozero
+
+#covert in numeric date format 
+rawdatawithzero$month <- as.numeric(rawdatawithzero$month)
+rawdatawithzero$day <- as.numeric(rawdatawithzero$day)
+rawdatawithzero$year <- as.numeric(rawdatawithzero$year)
+#rawdatawithzero$Weekday <- as.numeric(rawdatawithzero$Weekday)
+
+#rawdatawithzero$Account <- 0
+#rawdatawithzero$Account <- as.numeric(rawdatawithzero$Account)
+
+#rawdatawithzero = rawdatawithzero[,c(10,1,2,3,4,5,6,7,8,9)]
+
+rawdatawithzero$kWh <- predict(lm.fit,rawdatawithzero)
+
+#rawdatawithzero$Account <- NULL
+#rawdatanozero$Account <- NULL
+
+
+#rawdatanozero$Account <- 0
+#rawdatanozero$Account <- as.numeric(rawdatanozero$Account)
+
+#rawdatanozero = rawdatanozero[,c(10,1,2,3,4,5,6,7,8,9)]
+
+#exporting the file
+write.csv(rawdatawithzero, "predictedkWhrawdatawithzero.csv",row.names = FALSE)                            
+write.csv(rawdatanozero, "rawdatnozero.csv",row.names = FALSE)   
+
+#Removing Negative Values
+
+
+rawdatanegkWh<-rawdatawithzero[(rawdatawithzero$kWh<0),]
+
+rawdataposkWh<-rawdatawithzero[(rawdatawithzero$kWh>0),]
+
+summary(rawdatawithzero)
+
+write.csv(rawdatanegkWh,"rawdatawithnegativekwh1.csv",row.names = FALSE)
+
+#binding the data rawdatanozero and rawdatawithzero
+rawdatafilled <- rbind(rawdatanozero,rawdatawithzero)
+
+#including temperature data
+
+library(weatherData)
+
+
+#getting the hourly temperature data using R package
+weather <- getWeatherForDate("KBOS", rawdata$Date[1], end_date=rawdata$Date[length(rawdata$Date)], opt_detailed = TRUE, opt_all_columns = TRUE)
+
+
+
+#write.csv(weather,"Boston Weather.csv",row.names=FALSE)
 
 #bon=file.choose(new = FALSE)
 #weather<-read.csv(bon, header = TRUE)
-weather <- getWeatherForDate("KBOS", rawdata$Date[1], end_date=rawdata$Date[length(rawdata$Date)], opt_detailed = TRUE, opt_all_columns = TRUE)
+
 
 #Binning and removing unnecessary columns
 weather=weather[,c(1,3)]
@@ -154,7 +219,7 @@ weather=weather[order(weather$Date,weather$hour),]
 #To Visualize the outliers for temperature using Box Plot
 boxplot(weather$Temperature,horizontal = TRUE)
 boxplot.stats(weather$Temperature)
-summary(weather)
+
 #Replacing outliers with NA by Box Plot
 outliers = boxplot(weather$Temperature, plot=FALSE)$out
 outliers
@@ -186,7 +251,7 @@ colnames(weather)
 weather$Temperature <- round(weather$Temperature,digits=0)
 
 #merging the two data frames by left outer join
-sampleformat=merge(rawdata, weather,by=c("Date","hour"),all.x=TRUE)
+sampleformat=merge(rawdatafilled, weather,by=c("Date","hour"),all.x=TRUE)
 summary(sampleformat)
 
 #rearranging the order of columns for the desired output
@@ -198,12 +263,11 @@ sampleformat=sampleformat[order(sampleformat$Date,sampleformat$hour),]
 #To Visualize the outliers for merged data using Box Plot
 boxplot(sampleformat$Temperature,horizontal = TRUE)
 boxplot.stats(sampleformat$Temperature)
-summary(sampleformat)
 
 #checking for outliers in merged data and replacing them with NA
 outliers = boxplot(sampleformat$Temperature, plot=FALSE)$out
 outliers
-sampleformat[sampleformat$Temperature %in% outliers,11]=NA
+sampleformat[sampleformat$Temperature %in% outliers,3]=NA
 summary(sampleformat)
 
 #checking for NA's in merged data and replacing them with mean of 2 consecutive observations 
@@ -236,95 +300,30 @@ summary(sampleformat)
 #rounding the decimal values in Temperature
 sampleformat$Temperature <- round(sampleformat$Temperature,digits=0)
 
-sampleformat$month <- as.numeric(sampleformat$month)
-sampleformat$day <- as.numeric(sampleformat$day)
-sampleformat$year <- as.numeric(sampleformat$year)
-#sampleformat$Weekday <- as.numeric(sampleformat$Weekday)
 
-summary(sampleformat)
-write.csv(sampleformat, "Hourly_filled_data.csv",row.names = FALSE)
-
-Hourly_filled_data=sampleformat
-Hourly_filled_data1=sampleformat
-Hourly_filled_data2=sampleformat
-Hourly_filled_data3=sampleformat
-####REGRESSION###
-
-
-#Start Regression
-#install.packages('forecast')
-#lm.fit=lm(kWh~., data=sampleformat)
+#Start Regression on the sampleformat
 
 #singularities for account and year so remove them.
+lm.fit=lm(kWh~. -Account -Date -year -day -hour, data=sampleformat)
+summary(lm.fit)
 
-sampleformat$kWh <- as.numeric(sampleformat$kWh)
 library(MASS)
 library(ISLR)
 smp_size <- floor(0.80*nrow(sampleformat))
-
 set.seed(123)
 train_ind <- sample(seq_len(nrow(sampleformat)),size=smp_size)
 train <- sampleformat[train_ind, ]
 test <- sampleformat[-train_ind, ]
 
-lm.fit1= lm(kWh~.-Account -year, data = train)
-summary(lm.fit1)
+
 
 library(forecast)
-pred = predict(lm.fit1, test)
+pred = predict(lm.fit, test)
 
 #Exporting ReggressionOutputs and PerformanceMatrics
 
-a = accuracy(pred,test$kWh)
-a
+c = accuracy(pred,train$kWh)
+d= lm.fit$coefficients
 
-write.csv(a, "PerformanceMatrics filled_data_set_(1c)_approach.csv")
-
-summary(sampleformat)
-
-
-
-####2.PREDICTION
-
-
-#install.packages('tree')
-library (tree)
-library (MASS)
-library (ISLR)
-set.seed (1)
-tree = tree(kWh ~ .-Account -year, sampleformat)
-summary(tree)
-
-train = sample (1:nrow(sampleformat), nrow(sampleformat)/2)
-sf.test=sampleformat [-train,"kWh"]
-tree.sf = tree(kWh~.-Account -year,sampleformat,subset=train)
-summary (tree.sf)
-plot (tree.sf)
-text (tree.sf, pretty = 0)
-cv.sf = cv.tree (tree, FUN = prune.tree)
-plot (cv.sf$size, cv.sf$dev, type='b')
-
-prune.sf =prune.tree(tree, best = 9)
-#regression tree model output
-plot(prune.sf)
-text(prune.sf, pretty = 0)
-
-yhat1=predict (tree.sf, newdata =sampleformat [-train,])
-
-plot(yhat1,sf.test)
-abline (0,1)
-mean((yhat1 -sf.test)^2)
-
-
-yhat2=predict (prune.sf,newdata =sampleformat [-train,] )
-
-plot(yhat2,sf.test)
-abline (0,1)
-mean((yhat2 -sf.test)^2)
-
-
-regtree=accuracy(yhat1,sf.test)
-regtree
-write.csv(regtree,"Performance Metrics Regression Tree.csv",row.names = FALSE)
-
-
+write.csv(d, "sampleformatRegressionOutputs(1b.a).csv")
+write.csv(c, "sampleformatPerformanceMatrics(1b.a).csv")

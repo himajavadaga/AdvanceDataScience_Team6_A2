@@ -1,15 +1,20 @@
-#helps the user to pick the file
-x=file.choose(new = FALSE)
 
 #imports the file
-forecastData <- read.csv(x, header = TRUE)
 
-#renaming the column names
+library(xlsx)
+forecastData <- read.xlsx("forecastNewData.xlsx", sheetName="forecastNewData")
+
+
+
+
+#renaming the columnnames
+
 colnames(forecastData)=c("Date","hour","Temperature")
 
 #Transforming the columns
 weekdays1 <- c('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')
-forecastData$Date <- as.Date(forecastData$Date, format="%m/%d/%Y")
+forecastData$Date <- as.Date(as.character(forecastData$Date,"%Y%m%d"),"%Y%m%d")
+forecastData$Date <- as.Date(forecastData$Date, format = "%m%d%Y")
 forecastData$month=format(forecastData$Date, format = "%m")
 forecastData$day=format(forecastData$Date, format = "%d")
 forecastData$year= format(forecastData$Date, format = "%Y")
@@ -35,6 +40,7 @@ forecastData[forecastData$Temperature %in% outliers,3]=NA
 summary(forecastData)
 
 #Replacing NAs with mean of consecutive 2 observations for temperature
+
 for(i in 1:length(forecastData$Temperature))
 {
   if(is.na(forecastData$Temperature[i])==TRUE)
@@ -44,10 +50,12 @@ for(i in 1:length(forecastData$Temperature))
 }
 summary(forecastData)
 
-forecastData$month <- as.numeric(forecastData$month)
 forecastData$day <- as.numeric(forecastData$day)
 forecastData$year <- as.numeric(forecastData$year)
+
 forecastData$hour <- as.numeric(forecastData$hour)
+forecastData$month <- as.numeric(forecastData$month)
+
 
 for(i in 1:length(forecastData$day))
 {
@@ -56,28 +64,32 @@ for(i in 1:length(forecastData$day))
     forecastData$day[i]=format(forecastData$Date[i], format = "%d")
   }
 }
+
 forecastData$day <- as.numeric(forecastData$day)
 
+#predict power usage
+View(forecastData)
 
-#predict KWH_Class usage
 
-forecastData$Account <- 999999999
-forecastData$Account <- as.numeric(forecastData$Account)
-forecastData$kWh <- round(predict(tree.sf,forecastData),digits=0)
-forecastData$kWh <- round(predict(tree.train2,forecastData),digits=0)
 
-forecastData = forecastData[,c(11,1,2,3,4,5,6,7,8,9,10)]
+lm.fit <- glm(kWh~.-day -hour, data=train)
+summary(lm.fit)
 
-KWH_Class <- round(predict(tree.train2,forecastData),digits=0)
-forecastData = data.frame(forecastData,KWH_Class)
-forecastData$KWH_Class = ifelse ( forecastData$kWh >mean(forecastData$kWh) , "Above_Normal", "Optimal")
-#forecastData$KWH_Class.1=NULL
+# Predicted data from lm
 
-str(forecastData)
-summary(forecastData)
-forecastData=data.frame(Day=forecastData$Date,Hr=forecastData$hour,Temp=forecastData$Temperature,KWH=forecastData$KWH_Class)
-summary(forecastData)
+pr.lm <- predict(lm.fit,test)
+summary(pr.lm)
+View(sampleformat)
+
+View(forecastData)
+
+forecastData$kWh <- round(predict(pr.nn,forecastData),digits=0)
+
+forecastData$Account <- NULL
+
+forecastData <- forecastData[,c(1,5,9,10)]
+
+colnames(forecastData)=c("Day","Hr","Temp","KWH")
 
 #exporting the file
-write.csv(forecastData, "forecastOutput_999999999_ClassificationTree_newdata2.csv",row.names = FALSE)                            
-
+write.csv(forecastData, "forecastOutput_999999999_regressionTree_newdata.csv",row.names = FALSE)

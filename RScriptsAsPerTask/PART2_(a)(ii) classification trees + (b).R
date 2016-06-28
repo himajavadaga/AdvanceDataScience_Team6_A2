@@ -27,8 +27,8 @@ KWH_Class.test = KWH_Class[-train]
 tree.train = tree(KWH_Class ~ . -Account -year -kWh  , Hourly_filled_data, subset = train)
 #Evaluate its performance on the test data
 tree.pred = predict(tree.train, Hourly_filled_data.test, type = "class")
-table(tree.pred, KWH_Class.test)
-summary(tree.train)
+kop=table(tree.pred, KWH_Class.test)
+kop1=summary(tree.train)
 
 #Determine the optimal level
 set.seed (3)
@@ -45,8 +45,30 @@ text(prune.Hourly_filled_data, pretty =0)
 
 #The pruned tree performance
 prune.pred = predict(prune.Hourly_filled_data, Hourly_filled_data.test,type = "class")
-table(prune.pred, KWH_Class.test)
-summary(prune.Hourly_filled_data)
+lom=table(prune.pred, KWH_Class.test)
+lom1=summary(prune.Hourly_filled_data)
+kop
+kop1
+xx=kop1$misclass[1:1]
+yy=kop1$misclass[2:2]
+error_rate_classificationtrees=(xx/yy)*100
+error_rate_classificationtrees
+kop
+str(kop)
+str(error_rate_classificationtrees)
+f=as.table(error_rate_classificationtrees)
+f
+
+names(f)="error_rate"
+names(f)
+f
+
+write.table(kop,"classification trees Performance metrics.csv",col.names=TRUE,sep=",")
+write.table(f,"classification trees Performance metrics.csv",col.names=FALSE,sep=",",append = TRUE)
+
+
+
+
 
 #Export dataset
 #data(Hourly_filled_data, package="ISLR")
